@@ -3,6 +3,7 @@ const path = require("node:path");
 const os = require("node:os");
 const { spawn } = require("node:child_process");
 const { normalizeMaxBodyImages } = require("./settings");
+const { VOICE, IMAGE_STYLE, editorialProfile } = require("./blogProfile");
 
 const DEFAULT_AGENT_MODELS = {
   main: "high",
@@ -762,6 +763,7 @@ function buildPrompt({
   fs.mkdirSync(imageDir, { recursive: true });
 
   return [
+    editorialProfile("writer"),
     "You are generating a Korean Naver Blog post for a local desktop automation app.",
     "Do not include credentials or ask for secrets.",
     `Topic: ${topic}`,
@@ -851,7 +853,7 @@ function buildPrompt({
     "- In a failure case, do not generate images and do not write article sections explaining why writing is difficult.",
     "- Only set status to \"success\" when the remaining extracted excerpts support a real article.",
     "- If status is \"failed\", the desktop app will record failure history and stop the cycle. That is the correct behavior.",
-    "- Article must be Korean, Naver Blog SEO oriented, 1500-2000 Korean characters when possible.",
+    "- Article must be Korean, Naver Blog SEO oriented, 4000-12000 Korean characters excluding whitespace when possible.",
     researchTitleResult ? "- The article must fulfill the Writer Contract: articleMission, selectedTitle, topicThesis, readerPromise, firstSectionFocus, mustAnswer, mustCover, mustNotDo, and current bridge fields when required." : "",
     researchTitleResult ? "- The article must also fulfill the Writer Contract readerValueChecklist. If it cannot, return status \"failed\"." : "",
     researchSearchNeed === "skip"
@@ -863,7 +865,7 @@ function buildPrompt({
     "- If the excerpts are too thin or unrelated to the locked Topic thesis, fail with status \"failed\". Do not put source problems inside the article body.",
     "- Write like an excellent Korean Naver blogger/editor, not like an internal research report. The article body must not use meta words such as candidate, excerpt, provided material, search result, source quality, notes, or report.",
     "- Default human Naver Blog voice: sound like a real person organizing the issue for a reader. Use a warm but not chatty lead, mix sentence lengths, include reader-facing transitions such as what this means, why readers search for it, what to check before acting, and avoid stiff summary-report cadence.",
-    "- Unless Preferred tone explicitly asks otherwise, the opening should start from the reader's situation or curiosity before moving into facts. Do not fake personal experience, visits, purchases, or emotions that were not provided.",
+    "- Use the DALGOMI greeting and answer capsule before the reader situation. Do not fake personal experience, visits, purchases, or emotions that were not provided.",
     "- The article body must never narrate the agent's research process, source collection process, or verification workflow.",
     "- The article body must speak directly to the reader about the selected subject, not about the article's own coverage choices, writing limits, or internal validation decisions.",
     "- Category publishing direction is internal guidance. Do not copy it into the article body, do not justify the category, and do not open with a defensive contrast such as 'this is not a general guide/advice'.",
@@ -942,6 +944,7 @@ function buildResearchTitlePrompt({
   const laneList = Array.isArray(keywordLanes) ? keywordLanes : [];
   const recommendedLaneList = Array.isArray(recommendedKeywordLanes) ? recommendedKeywordLanes : [];
   return [
+    editorialProfile("research"),
     "You are the Research/Title Agent for a Korean Naver Blog automation app.",
     "Do not write the article body. Do not generate images.",
     `Category: ${category}`,
@@ -1045,6 +1048,7 @@ function buildResearchTitleRetryPrompt(options, previousResearchResult) {
   const resultPath = path.join(options.jobDir, "research-title-result.json");
   const hasSearchCandidates = Array.isArray(options.searchResults) && options.searchResults.length > 0;
   return [
+    editorialProfile("research"),
     "You are the Research/Title Agent revising an existing Korean Naver Blog research decision.",
     "Do not write the article body or generate images. Re-evaluate only what changed after the previous decision.",
     `Category: ${options.category}`,
@@ -1093,6 +1097,7 @@ function buildWriterRetryPrompt(options, previousWriterResult) {
   const bodyImageLimit = normalizeMaxBodyImages(options.maxBodyImages);
   const writerContract = buildWriterContract(options.researchTitleResult, options);
   return [
+    editorialProfile("writer"),
     "You are the Writer Agent revising an existing Korean Naver Blog article.",
     "Correct only the requested problems while preserving supported content, the selected title, and factual boundaries.",
     `Selected title: ${options.researchTitleResult?.finalTitle || options.topic || ""}`,
@@ -1112,7 +1117,7 @@ function buildWriterRetryPrompt(options, previousWriterResult) {
     "Revision requirements:",
     "- Keep the exact selected title and rewrite the complete JSON result at the same path. Do not explain the retry in the article.",
     "- Use only confirmed facts and source boundaries in the handoff. Do not invent dates, amounts, conditions, official claims, experience, or current status.",
-    "- The article must be Korean, reader-facing, naturally structured, normally 1500-2000 Korean characters, and must directly fulfill every Writer Contract promise.",
+    "- The article must be Korean, reader-facing, naturally structured, normally 4000-12000 Korean characters excluding whitespace, and must directly fulfill every Writer Contract promise.",
     "- Do not narrate research, prompts, candidates, agents, reports, JSON, source quality, or internal limitations in the article.",
     "- Preserve [SECTION - heading] markers. Do not repeat the generated title as a plain article line.",
     options.includeTitleImage !== false
@@ -1153,6 +1158,7 @@ function buildMainReviewPrompt({
     preferredTone
   });
   return [
+    editorialProfile("review"),
     "You are the Main Agent for a Korean Naver Blog automation app.",
     "This is the final review step. Do not act as a separate Review Agent.",
     "Do not rewrite the article. Judge whether it can proceed to preview/publish.",
@@ -1262,6 +1268,7 @@ function buildWriterContractRefinementPrompt({
 }) {
   const resultPath = path.join(jobDir, "writer-contract-result.json");
   return [
+    editorialProfile("research"),
     "You are the Main Agent contract refinement step for a Korean Naver Blog automation app.",
     "Your task is semantic classification, not article writing.",
     "Read the Research/Title result and the draft Writer Contract.",
@@ -1355,6 +1362,7 @@ function buildImageWorkerPrompt({
   const bodyImageLimit = normalizeMaxBodyImages(maxBodyImages);
   fs.mkdirSync(imageDir, { recursive: true });
   return [
+    IMAGE_STYLE,
     "You are the Image Worker for a Korean Naver Blog automation app.",
     "You are not a content agent. Do not rewrite the title, article, tags, facts, or structure.",
     "Generate only the requested reference images from the Writer Agent image prompts.",
@@ -1778,7 +1786,7 @@ function buildWriterContract(researchResult = {}, context = {}) {
     tone: firstCompactText([
       context.preferredTone,
       researchResult?.writerContract?.tone
-    ], "Korean Naver Blog editorial tone; human, reader-facing, practical, clear, and non-clickbait.")
+    ], VOICE)
   };
 }
 
@@ -3342,6 +3350,7 @@ module.exports = {
     compactWriterResultForPrompt,
     rankSearchResultsForPrompt,
     buildPrompt,
+    buildResearchTitlePrompt,
     buildResearchTitleRetryPrompt,
     buildWriterRetryPrompt,
     buildMainReviewPrompt,
